@@ -1,0 +1,65 @@
+Notes:
+
+When running token_gen inside Docker, you must mount ./data:/app/data so /app/data persists on host.
+File notes & behaviour summary
+token_gen.py writes token to /app/data/access_token.txt. When running locally you can run it in the host (not container) if you have KiteConnect installed locally — but recommended to run inside container with volume mount so token file is in ./data.
+main.py runs a scheduler that only runs during market hours (09:15–15:30 IST Mon–Fri). Interval configurable by SCHEDULE_INTERVAL_MINUTES in config.env.
+Strategy is conservative: buy only if no existing position detected. Replace with your logic later.
+Logging is in ./data/trade_log.txt (host path when volume-mounted).
+Commands (exact, run from project root)
+
+Build the Docker image:
+
+docker build -t auto-trader .
+Create data folder (host) for token and logs:
+mkdir -p data
+Generate access token (run once per day). This command runs interactive token generator inside container and writes token to host ./data/access_token.txt:
+
+docker run -it --rm \
+  --env-file config.env \
+  -v $(pwd)/data:/app/data \
+  -v $(pwd)/config.env:/app/config.env \
+  auto-trader python src/token_gen.py
+
+The script will print a login URL. Open that URL in your browser, login to Zerodha. After redirect, the URL will contain request_token=... — copy that request_token value and paste into the container prompt.
+After success, data/access_token.txt will contain the access token.
+Run the scheduled bot (detached):
+
+docker run -d \
+  --env-file config.env \
+  -v $(pwd)/data:/app/data \
+  -v $(pwd)/config.env:/app/config.env \
+  --name auto-trader \
+  auto-trader
+
+Check logs on host:
+tail -f data/trade_log.txt
+
+Re-generate token daily (repeat step 3 once each day before trading starts) — token expires daily at midnight IST.
+Important operational cautions (be explicit)
+Daily token renewal required. Zerodha access tokens expire daily; you must run token_gen.py once per day to continue trading that day. This is a Zerodha constraint.
+This bot uses MARKET orders in example. Modify place_order or strategy to use limit orders / stop-loss / position sizing before real money.
+Rate limits & TOS. Respect broker API rate limits and terms of service. Do not attempt to automate login flows with headless browsers (that can break TOS).
+Testing first. Test with paper/sandbox accounts if possible. If not available, test with very small quantity.
+Backups & monitoring. Add alerting for failures and ensure logs are rotated if you run long-term.
+
+#######
+
+
+steps to run
+build docker image
+docker build -t auto-trader .
+generate token (based on broker in config.env)
+docker run -it --env-file config.env -v $(pwd)/data:/app/data auto-trader python src/token_gen.py
+run bot
+docker run -d --env-file config.env -v $(pwd)/data:/app/data auto-trader
+
+#####
+
+Notes:
+ use this in marketfeed file 
+Replace UPSTOX_WS_URL with the actual Upstox WebSocket URL.
+
+The callback function receives tick data; we’ll use it to run the strategy and place paper trades.
+
+Note: Replace the subscription/auth details with your actual Zerodha credentials and instrument tokens.

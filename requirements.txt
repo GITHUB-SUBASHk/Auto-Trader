@@ -1,0 +1,4 @@
+kiteconnect
+upstox-python
+python-dotenv
+schedule
